@@ -1,10 +1,13 @@
 import serial
+import serial.tools.list_ports
 #import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
 import time
 import datetime
 import collections
+import sys
+
 
 ORANGE = '#ffa500'
 
@@ -15,10 +18,25 @@ print(ser.name)
 plt.ion()
 plt.style.use('dark_background')
 
-
 class CO2Sensor:
 
-	def __init__(self, serial_port_name = '/dev/ttyUSB0'):
+	def __init__(self, serial_port_name = None):
+
+		if not serial_port_name:
+			ports = serial.tools.list_ports.comports()
+
+			print("Found the following serial ports:")
+			for port in ports:
+				print("\t" + port.device)
+
+			if len(ports) == 0:
+				print('No Serial ports found')
+				sys.exit(1)
+
+			serial_port_name = ports[0].device
+
+			print("Using: " + serial_port_name)
+
 		self.serial_port_name = serial_port_name
 		self.serial = serial.Serial(serial_port_name, 9600)
 
@@ -36,6 +54,10 @@ class RealTimePlot:
 		self.fig, self.axes = plt.subplots()
 
 		self.line, = self.axes.plot([], [], 'w')
+		self.green_line, = self.axes.plot([], [], 'g')
+		self.orange_line, = self.axes.plot([], [], ORANGE)
+		self.red_line, = self.axes.plot([], [], 'r')
+		self.axes.grid(color = (0.3 ,0.3 ,0.3))
 		mng = plt.get_current_fig_manager()
 
 		self.samples = collections.deque(maxlen = depth)
@@ -74,7 +96,44 @@ class RealTimePlot:
 			self.warning.set_text('')
 
 	def plot(self):
-		self.line.set_data(self.timestamps, self.samples)
+
+		green_data = list()
+		green_timestamps = list()
+		orange_data = list()
+		orange_timestamps = list()
+		red_data = list()
+		red_timestamps = list()
+
+		for i in range(len(self.samples)):
+			if self.samples[i] > self.critical_level:
+				red_data.append(self.samples[i])
+				red_timestamps.append(self.timestamps[i])
+				orange_data.append(self.samples[i])
+				orange_timestamps.append(self.timestamps[i])
+				green_data.append(self.samples[i])
+				green_timestamps.append(self.timestamps[i])
+
+			elif self.samples[i] > self.warning_level:
+				red_data.append(None)
+				red_timestamps.append(self.timestamps[i])
+				orange_data.append(self.samples[i])
+				orange_timestamps.append(self.timestamps[i])
+				green_data.append(self.samples[i])
+				green_timestamps.append(self.timestamps[i])
+
+			else:
+				red_data.append(None)
+				red_timestamps.append(self.timestamps[i])
+				orange_data.append(None)
+				orange_timestamps.append(self.timestamps[i])
+				green_data.append(self.samples[i])
+				green_timestamps.append(self.timestamps[i])
+
+		self.green_line.set_data(green_timestamps, green_data)
+		self.orange_line.set_data(orange_timestamps, orange_data)
+		self.red_line.set_data(red_timestamps, red_data)
+
+		#self.line.set_data(self.timestamps, self.samples)
 		x_min = min(self.timestamps)
 		x_max = max(self.timestamps)
 		y_min = min(self.samples)
@@ -89,9 +148,15 @@ class RealTimePlot:
 sensor = CO2Sensor()
 plot = RealTimePlot()
 
+logfile = open('co2log.txt', 'a')
+
 while True:
 	sample = sensor.read()
 	timestamp = datetime.datetime.now()
+	epoch = int(time.time())
+
+	logfile.write("{},{}\n".format(epoch, sample))
+	logfile.flush()
 
 	plot.add_sample(sample, timestamp)
 	plot.update()
