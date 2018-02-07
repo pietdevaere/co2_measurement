@@ -11,10 +11,6 @@ import sys
 
 ORANGE = '#ffa500'
 
-ser = serial.Serial('/dev/ttyUSB0',9600)
-print(ser.name)
-
-
 plt.ion()
 plt.style.use('dark_background')
 
